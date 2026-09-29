@@ -16,6 +16,20 @@ source "$state_file"
 export AWS_REGION
 mkdir -p "$tmp_dir"
 
+# Honor the first-time versioning propagation allowance recorded by create_lab.sh.
+# AWS recommends waiting about 15 minutes after first enabling versioning before the
+# first object write, because propagation can otherwise cause visibility problems.
+ready_at="${LAB_VERSIONING_READY_AT:-0}"
+now="$(date -u +%s)"
+if (( now < ready_at )); then
+  wait_s=$(( ready_at - now ))
+  printf 'Newly versioned bucket: waiting %s s for the ~15-minute first-write allowance AWS recommends.\n' "$wait_s"
+  printf '(Set LAB_SKIP_VERSIONING_WAIT=1 only if you deliberately accept the first-write risk.)\n'
+  if [[ "${LAB_SKIP_VERSIONING_WAIT:-0}" != "1" ]]; then
+    sleep "$wait_s"
+  fi
+fi
+
 aws s3 cp "$root_dir/fixtures/original.txt" "s3://$LAB_BUCKET/$object_key"
 aws s3api head-object --bucket "$LAB_BUCKET" --key "$object_key" >/dev/null
 aws s3 cp "s3://$LAB_BUCKET/$object_key" "$tmp_dir/downloaded-original.txt"

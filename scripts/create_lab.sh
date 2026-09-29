@@ -44,8 +44,12 @@ bucket_created=1
 
 aws s3api put-public-access-block \
   --bucket "$bucket" \
-  --public-access-block-configuration \
-  'BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true'
+  --public-access-block-configuration '{
+    "BlockPublicAcls": true,
+    "IgnorePublicAcls": true,
+    "BlockPublicPolicy": true,
+    "RestrictPublicBuckets": true
+  }'
 
 aws s3api put-bucket-ownership-controls \
   --bucket "$bucket" \
@@ -54,11 +58,18 @@ aws s3api put-bucket-ownership-controls \
 aws s3api put-bucket-versioning \
   --bucket "$bucket" \
   --versioning-configuration Status=Enabled
+versioning_ready_at=$(( $(date -u +%s) + 900 ))
 
 aws s3api put-bucket-encryption \
   --bucket "$bucket" \
-  --server-side-encryption-configuration \
-  '{"Rules":[{"ApplyServerSideEncryptionByDefault":{"SSEAlgorithm":"AES256"},"BucketKeyEnabled":false}]}'
+  --server-side-encryption-configuration '{
+    "Rules": [
+      {
+        "ApplyServerSideEncryptionByDefault": { "SSEAlgorithm": "AES256" },
+        "BucketKeyEnabled": false
+      }
+    ]
+  }'
 
 aws s3api put-bucket-tagging \
   --bucket "$bucket" \
@@ -68,9 +79,13 @@ umask 077
 {
   printf 'LAB_BUCKET=%q\n' "$bucket"
   printf 'AWS_REGION=%q\n' "$region"
+  printf 'LAB_VERSIONING_READY_AT=%q\n' "$versioning_ready_at"
 } > "$state_file"
 
 trap - ERR
 
 printf 'Created private versioned lab bucket: %s\n' "$bucket"
 printf 'State recorded in %s\n' "$state_file"
+printf 'Versioning enabled. AWS recommends waiting about 15 minutes before the first\n'
+printf 'object write to a newly versioned bucket; run_workflow.sh honors that allowance\n'
+printf 'automatically (use the interval to read the model and command explanations).\n'

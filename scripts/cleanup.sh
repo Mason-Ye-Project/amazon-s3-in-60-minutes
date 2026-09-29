@@ -4,6 +4,7 @@ set -euo pipefail
 root_dir="$(cd "$(dirname "$0")/.." && pwd)"
 state_file="$root_dir/.lab-state.env"
 tmp_dir="$root_dir/.tmp"
+combined_limit="${LAB_CLEANUP_MAX_ITEMS:-100}"
 
 if [[ ! -f "$state_file" ]]; then
   printf 'No lab state file exists; nothing to clean.\n'
@@ -13,6 +14,9 @@ fi
 # shellcheck disable=SC1090
 source "$state_file"
 export AWS_REGION
+
+# --- Preflight: validate the target and plan the deletion BEFORE deleting anything. ---
+# Nothing below this line deletes until the full plan is validated and within the limit.
 
 if [[ ! "$LAB_BUCKET" =~ ^s3-60-lab-[a-z0-9-]+$ ]]; then
   printf 'Refusing cleanup for unexpected bucket name: %s\n' "$LAB_BUCKET" >&2
@@ -36,25 +40,35 @@ if [[ "$project_tag" != "s3-60-lab" || "$managed_tag" != "book-companion" ]]; th
   exit 1
 fi
 
+# Inventory both object versions and delete markers up front.
+version_count="$(
+  aws s3api list-object-versions --bucket "$LAB_BUCKET" \
+    --query 'length(Versions || `[]`)' --output text
+)"
+marker_count="$(
+  aws s3api list-object-versions --bucket "$LAB_BUCKET" \
+    --query 'length(DeleteMarkers || `[]`)' --output text
+)"
+total_count=$(( version_count + marker_count ))
+
+# One combined safety brake: refuse an oversized plan without deleting anything.
+if (( total_count > combined_limit )); then
+  printf 'Refusing automated cleanup: %s object versions + %s delete markers = %s items exceeds the %s-item safety limit. Nothing was deleted.\n' \
+    "$version_count" "$marker_count" "$total_count" "$combined_limit" >&2
+  exit 1
+fi
+
+# --- Execute the approved plan. ---
+
 mkdir -p "$tmp_dir"
 
-delete_versions() {
+delete_member() {
   local member="$1"
+  local count="$2"
+  if (( count == 0 )); then
+    return 0
+  fi
   local payload="$tmp_dir/delete-$member.json"
-  local count
-  count="$(
-    aws s3api list-object-versions \
-      --bucket "$LAB_BUCKET" \
-      --query "length($member || \`[]\`)" \
-      --output text
-  )"
-  if [[ "$count" -eq 0 ]]; then
-    return
-  fi
-  if [[ "$count" -gt 100 ]]; then
-    printf 'Refusing automated cleanup of more than 100 %s.\n' "$member" >&2
-    exit 1
-  fi
   aws s3api list-object-versions \
     --bucket "$LAB_BUCKET" \
     --query "{Objects: $member[].{Key:Key,VersionId:VersionId}, Quiet: \`true\`}" \
@@ -64,8 +78,8 @@ delete_versions() {
     --delete "file://$payload" >/dev/null
 }
 
-delete_versions Versions
-delete_versions DeleteMarkers
+delete_member Versions "$version_count"
+delete_member DeleteMarkers "$marker_count"
 
 remaining_versions="$(
   aws s3api list-object-versions --bucket "$LAB_BUCKET" \
@@ -89,4 +103,4 @@ if ! aws s3api wait bucket-not-exists --bucket "$LAB_BUCKET"; then
 fi
 
 rm -f "$state_file"
-printf 'PASS: all versions and delete markers removed; bucket is absent.\n'
+printf 'PASS: preflight approved %s items; all versions and delete markers removed; bucket is absent.\n' "$total_count"

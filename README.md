@@ -25,7 +25,8 @@ Safety boundaries:
 - the bucket uses the traditional shared per-partition S3 general-purpose namespace, so its name keeps a timestamp-and-random suffix (the optional account-level bucket namespace is not used);
 - Block Public Access remains enabled;
 - no customer or personal data belongs in the lab;
-- cleanup verifies ownership tags and removes versions plus delete markers;
+- run_workflow.sh honors the ~15-minute first-time versioning propagation allowance AWS recommends before the first object write;
+- cleanup runs a complete preflight (name, tags, and a combined version-plus-marker inventory) and refuses without deleting anything if more than 100 items are found;
 - the presigned URL is short-lived and is not printed or stored as evidence;
 - the entire experiment is designed to remain far below US$3.
 

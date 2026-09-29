@@ -53,8 +53,9 @@ total_count=$(( version_count + marker_count ))
 
 # One combined safety brake: refuse an oversized plan without deleting anything.
 if (( total_count > combined_limit )); then
-  printf 'Refusing automated cleanup: %s object versions + %s delete markers = %s items exceeds the %s-item safety limit. Nothing was deleted.\n' \
-    "$version_count" "$marker_count" "$total_count" "$combined_limit" >&2
+  printf 'Refusing cleanup: %s versions + %s markers = %s items. ' \
+    "$version_count" "$marker_count" "$total_count" >&2
+  printf 'The limit is %s. Nothing was deleted.\n' "$combined_limit" >&2
   exit 1
 fi
 

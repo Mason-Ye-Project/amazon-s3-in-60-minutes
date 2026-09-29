@@ -29,10 +29,18 @@ case "$args" in
     printf '{}\\n'
     ;;
   *"DeleteMarkers ||"*)
-    if [[ -f "$AWS_DELETED_FLAG" ]]; then printf '0\\n'; else printf '%s\\n' "$FAKE_MARKERS"; fi
+    if [[ -f "$AWS_DELETED_FLAG" ]]; then
+      printf '0\\n'
+    else
+      printf '%s\\n' "$FAKE_MARKERS"
+    fi
     ;;
   *"Versions ||"*)
-    if [[ -f "$AWS_DELETED_FLAG" ]]; then printf '0\\n'; else printf '%s\\n' "$FAKE_VERSIONS"; fi
+    if [[ -f "$AWS_DELETED_FLAG" ]]; then
+      printf '0\\n'
+    else
+      printf '%s\\n' "$FAKE_VERSIONS"
+    fi
     ;;
   *delete-bucket*) : ;;
   *wait*) : ;;
@@ -143,14 +151,22 @@ class CompanionTests(unittest.TestCase):
         code, output, log = _run_cleanup(versions=2, markers=101)
         self.assertNotEqual(code, 0, "cleanup should refuse an oversized plan")
         self.assertNotIn("delete-objects", log, "no deletion may occur before refusal")
-        self.assertNotIn("delete-bucket", log, "the bucket must not be deleted on refusal")
+        self.assertNotIn(
+            "delete-bucket",
+            log,
+            "bucket deletion must not occur after refusal",
+        )
         self.assertIn("Nothing was deleted", output)
 
     def test_cleanup_preflight_refuses_combined_over_limit(self) -> None:
         # Audit case: 60 versions + 60 markers (120 combined) must be refused, not
         # silently deleted and reported as success.
         code, output, log = _run_cleanup(versions=60, markers=60)
-        self.assertNotEqual(code, 0, "cleanup should refuse when the combined total exceeds 100")
+        self.assertNotEqual(
+            code,
+            0,
+            "combined inventory over the limit must be refused",
+        )
         self.assertNotIn("delete-objects", log, "no deletion may occur before refusal")
         self.assertNotIn("delete-bucket", log)
         self.assertNotIn("PASS", output)

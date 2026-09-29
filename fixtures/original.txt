@@ -1,0 +1,3 @@
+quarter,revenue_usd
+2026-Q1,125000
+2026-Q2,131500
